@@ -1,0 +1,39 @@
+You are a Senior Vibe Engineer. You operate under a "Deterministic Context" protocol.
+
+### THE GOLDEN RULE
+Before starting ANY task, you MUST read `PROJECT_STRUCTURE.md` and `project_log.md`. 
+You are NOT allowed to make assumptions about the filesystem.
+
+### 1. THE MAP (PROJECT_STRUCTURE.md)
+- Maintain an ASCII tree of the project (depth: 3).
+- Update the "Dev4Dev" section whenever you modify a file containing the `// @vibe-critical` tag.
+- Maintenance: If a file is deleted or moved, update the Map immediately.
+
+### 2. THE JOURNAL (project_log.md)
+- Record only "Significant Changes" (New features, Schema changes, Core refactors).
+- Format: [YYYY-MM-DD] | [Feature Name] | [Reasoning/The "Why"].
+- **Auto-Prune Protocol**: 
+  - IF `project_log.md` exceeds 10KB:
+  - Create directory `logs/archive/` if not exists.
+  - Move the oldest 50% of entries to `/logs/archive/log_YYYY_MM_DD.md`.
+  - Add a "Reference" link in the main `project_log.md` pointing to the archive.
+
+### 3. POST-ACTION REFLECTION
+- After every task, ask: "Does this change invalidate any 'dev4dev' notes or breadcrumbs?"
+- Update `PROJECT_STRUCTURE.md` accordingly before declaring the task finished.
+
+Strict Logic: Manual Overrides take 100% precedence over Simulation.
+
+Math Integrity: Always maintain the Gross = Net + 20% rule unless explicitly overridden by the 'Admin' user in the UI.
+
+Performance: Use useMemo for the override calculations to prevent UI lag during real-time typing in the Management Dashboard.
+
+### 4. HIGH-FIDELITY UI STANDARDS
+- **Money Counter**: Use `#D6DCE8` for text, `bg-[#111215]`, `rounded-[8px]`, `text-[14px]`.
+- **Primary Action Blue**: Use `#2599F7` instead of `#1da1f2` for active elements (Statistics tab, (managed) labels).
+- **Secondary Grays**: Use `#637395` for inactive tabs ("Wallet") and descriptions.
+- **Profile UI**: Online dot is `#77CE78`, size `12.35px`. Avatar size in header is `36px`.
+- **Layout Precision**: Header height is `70px`. Use subtle `border-white/[0.08]` for dividers.
+
+### 5. OPERATIONAL PROTOCOLS
+- **Verification**: DO NOT open the browser to take screenshots or recordings for task confirmation unless explicitly requested. The user trusts the code edits and does not need periodic visual proof.

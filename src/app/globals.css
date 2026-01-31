@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  /* Light mode variables (default) */
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+
+  --color-primary: #1da1f2;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #475569;
+
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+
+  --color-accent: #1da1f2;
+  --color-accent-foreground: #ffffff;
+
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+
+  --color-border: #e2e8f0;
+  --color-input: #ffffff;
+  --color-ring: #1da1f2;
+
+  /* Custom Chart Colors */
+  --color-stats-tips: #a855f7;
+  --color-stats-subs: #22c55e;
+  --color-stats-media: #0f172a;
+  --color-stats-referral: #3b82f6;
+
+  --radius-lg: 0.5rem;
+  --radius-md: calc(0.5rem - 2px);
+  --radius-sm: calc(0.5rem - 4px);
+}
+
+/* Dark mode overrides */
+html[data-theme="dark"] {
+  --color-background: #111215;
+  --color-foreground: #ffffff;
+
+  --color-card: #111215;
+  --color-card-foreground: #ffffff;
+
+  --color-popover: #111215;
+  --color-popover-foreground: #ffffff;
+
+  --color-secondary: #222325;
+  --color-secondary-foreground: #ffffff;
+
+  --color-muted: #1c1d1f;
+  --color-muted-foreground: #8a8d91;
+
+  --color-border: #222325;
+  --color-input: #1c1d1f;
+
+  --color-stats-media: #ffffff;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6;
+}
+
+/* Dense UI Adjustments */
+.dense-card {
+  @apply bg-card p-3 rounded-lg border border-border shadow-sm;
+}
+
+.dense-text-sm {
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+}
