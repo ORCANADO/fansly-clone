@@ -10,7 +10,8 @@ import {
   distributeMonthlyTotalEvenly,
   createEmptyDailyCategoryValues,
   calculateDailyValues,
-  calculateCategoryTotals
+  calculateCategoryTotals,
+  createMonthlyOverrideWithDailyCategoryValues
 } from "@/types/overrides";
 
 const MANUAL_OVERRIDES_KEY = 'vibestats_manual_overrides';
@@ -55,7 +56,7 @@ export function getAllManualOverrides(): ManualOverridesStorage {
     }
 
     const parsed = JSON.parse(stored) as ManualOverridesStorage;
-    
+
     // Validate the parsed data has the expected structure
     if (typeof parsed !== 'object' || parsed === null) {
       console.warn('Invalid manual overrides data in localStorage, returning defaults');
@@ -64,7 +65,7 @@ export function getAllManualOverrides(): ManualOverridesStorage {
 
     // Check if migration is needed
     const migrated = migrateLegacyOverridesIfNeeded(parsed);
-    
+
     // If migration happened, save the migrated data
     if (migrated !== parsed) {
       localStorage.setItem(MANUAL_OVERRIDES_KEY, JSON.stringify(migrated));
@@ -92,27 +93,27 @@ function migrateLegacyOverridesIfNeeded(
   for (const [monthKey, override] of Object.entries(overrides)) {
     // Check if this override needs migration to dailyCategoryValues
     const needsDailyCategoryValues = !override.dailyCategoryValues || Object.keys(override.dailyCategoryValues).length === 0;
-    
+
     if (needsDailyCategoryValues) {
       needsMigration = true;
       const daysInMonth = getDaysInMonth(monthKey);
-      
+
       // Case 1: Has dailyValues but no dailyCategoryValues
       if (override.dailyValues && Object.keys(override.dailyValues).length > 0) {
         // Convert dailyValues to dailyCategoryValues by applying percentages
         const dailyCategoryValues: Record<string, DailyCategoryBreakdown> = {};
-        
+
         // Use custom percentages if available, otherwise use defaults
         const mediaPercent = override.categoryPercentages?.media ?? 0.58;
         const mediaSetsPercent = override.categoryPercentages?.mediaSets ?? 0.21;
         const tipsPercent = override.categoryPercentages?.tips ?? 0.08;
         const subscriptionsPercent = override.categoryPercentages?.subscriptions ?? 0.13;
-        
+
         // Create dailyCategoryValues for all days in month
         for (let day = 1; day <= daysInMonth; day++) {
           const dayKey = day.toString();
           const dayTotal = override.dailyValues[dayKey] || 0;
-          
+
           dailyCategoryValues[dayKey] = {
             media: dayTotal * mediaPercent,
             tips: dayTotal * tipsPercent,
@@ -120,7 +121,7 @@ function migrateLegacyOverridesIfNeeded(
             mediaSets: dayTotal * mediaSetsPercent,
           };
         }
-        
+
         migrated[monthKey] = {
           ...override,
           dailyCategoryValues,
@@ -135,10 +136,10 @@ function migrateLegacyOverridesIfNeeded(
           daysInMonth,
           override.categoryPercentages
         );
-        
+
         // Calculate dailyValues from dailyCategoryValues for backward compatibility
         const dailyValues = calculateDailyValues(dailyCategoryValues);
-        
+
         migrated[monthKey] = {
           ...override,
           dailyCategoryValues,
@@ -212,7 +213,7 @@ export function deleteManualOverride(monthKey: string): void {
   try {
     const overrides = getAllManualOverrides();
     const { [monthKey]: _, ...remainingOverrides } = overrides;
-    
+
     localStorage.setItem(MANUAL_OVERRIDES_KEY, JSON.stringify(remainingOverrides));
   } catch (error) {
     console.error('Error deleting manual override from localStorage:', error);
@@ -323,10 +324,10 @@ export function isValidMonthKey(monthKey: string): boolean {
  */
 export function exportManualOverridesToCSV(): string {
   const overrides = getAllManualOverrides();
-  
-  // CSV headers
+
+  // CSV headers for daily data
   const headers = [
-    'Month',
+    'Date',
     'Net Income',
     'Gross Income',
     'Media',
@@ -337,24 +338,56 @@ export function exportManualOverridesToCSV(): string {
     'Last Updated',
     'Is Manual'
   ];
-  
-  // Convert each override to CSV row
-  const rows = Object.entries(overrides).map(([monthKey, override]) => {
-    return [
-      monthKey,
-      override.netIncome.toFixed(2),
-      override.grossIncome.toFixed(2),
-      override.categories.media.toFixed(2),
-      override.categories.mediaSets.toFixed(2),
-      override.categories.tips.toFixed(2),
-      override.categories.subscriptions.toFixed(2),
-      override.note || '',
-      override.lastUpdated,
-      override.isManual ? 'TRUE' : 'FALSE'
-    ].map(field => `"${field}"`).join(',');
+
+  const allRows: string[] = [];
+
+  // Iterate over each month's override
+  Object.entries(overrides).forEach(([monthKey, override]) => {
+    const dailyData = override.dailyCategoryValues || {};
+    const [year, month] = monthKey.split('-').map(Number);
+
+    // Sort days numerically
+    const dayKeys = Object.keys(dailyData).sort((a, b) => Number(a) - Number(b));
+
+    dayKeys.forEach(dayStr => {
+      const breakdown = dailyData[dayStr];
+      if (!breakdown) return;
+
+      const day = Number(dayStr);
+      // Construct date string YYYY-MM-DD
+      // Note: month is 1-based in monthKey.
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+      const dailyNet = breakdown.media + breakdown.mediaSets + breakdown.tips + breakdown.subscriptions;
+      const dailyGross = dailyNet * 1.2; // 20% fee assumption holds for daily too
+
+      const row = [
+        dateStr,
+        dailyNet.toFixed(2),
+        dailyGross.toFixed(2),
+        breakdown.media.toFixed(2),
+        breakdown.mediaSets.toFixed(2),
+        breakdown.tips.toFixed(2),
+        breakdown.subscriptions.toFixed(2),
+        override.note || '', // Monthly note applies to all days, or empty? User might prefer empty to avoid repetition, but let's keep it contextually.
+        override.lastUpdated,
+        override.isManual ? 'TRUE' : 'FALSE'
+      ].map(field => `"${field}"`).join(',');
+
+      allRows.push(row);
+    });
   });
-  
-  return [headers.join(','), ...rows].join('\n');
+
+  // Sort all rows by date descending (most recent first) ? Or ascending?
+  // User didn't specify, but usually chronological or reverse chronological.
+  // Original `getMonthsWithOverrides` did reverse sort. Let's do reverse chronological (newest date first).
+  allRows.sort((a, b) => {
+    const dateA = a.split(',')[0].replace(/"/g, '');
+    const dateB = b.split(',')[0].replace(/"/g, '');
+    return dateB.localeCompare(dateA);
+  });
+
+  return [headers.join(','), ...allRows].join('\n');
 }
 
 /**
@@ -364,11 +397,11 @@ export function downloadManualOverridesCSV(): void {
   if (typeof window === 'undefined') {
     return;
   }
-  
+
   const csvContent = exportManualOverridesToCSV();
   const timestamp = new Date().toISOString().split('T')[0];
   const filename = `vibestats_manual_overrides_${timestamp}.csv`;
-  
+
   // Create download link
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -393,18 +426,33 @@ export function importManualOverridesFromCSV(csvText: string): {
 } {
   const errors: string[] = [];
   let successCount = 0;
-  
+
   try {
     const lines = csvText.split('\n').filter(line => line.trim());
     if (lines.length < 2) {
       errors.push('CSV file is empty or has no data rows');
       return { success: 0, errors, total: 0 };
     }
-    
+
+    // Normalize headers: remove quotes and trim
     const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-    
+
+    // Check for new daily format
+    const isDailyFormat = headers.includes('Date');
+
     // Validate headers
-    const expectedHeaders = [
+    const expectedHeaders = isDailyFormat ? [
+      'Date',
+      'Net Income',
+      'Gross Income',
+      'Media',
+      'Media Sets',
+      'Tips',
+      'Subscriptions',
+      'Note',
+      'Last Updated',
+      'Is Manual'
+    ] : [
       'Month',
       'Net Income',
       'Gross Income',
@@ -416,91 +464,165 @@ export function importManualOverridesFromCSV(csvText: string): {
       'Last Updated',
       'Is Manual'
     ];
-    
+
     if (!expectedHeaders.every(h => headers.includes(h))) {
       errors.push(`CSV headers don't match expected format. Found: ${headers.join(', ')}`);
       return { success: 0, errors, total: 0 };
     }
-    
-    // Process each data row
-    for (let i = 1; i < lines.length; i++) {
-      try {
-        const row = lines[i];
-        const values = row.split(',').map(v => v.replace(/^"|"$/g, '').trim());
-        
-        if (values.length < headers.length) {
-          errors.push(`Row ${i}: Not enough columns (expected ${headers.length}, got ${values.length})`);
-          continue;
-        }
-        
-        const monthKey = values[headers.indexOf('Month')];
-        if (!isValidMonthKey(monthKey)) {
-          errors.push(`Row ${i}: Invalid month format "${monthKey}". Expected "YYYY-MM"`);
-          continue;
-        }
-        
-        const netIncome = parseFloat(values[headers.indexOf('Net Income')]);
-        const grossIncome = parseFloat(values[headers.indexOf('Gross Income')]);
-        const media = parseFloat(values[headers.indexOf('Media')]);
-        const mediaSets = parseFloat(values[headers.indexOf('Media Sets')]);
-        const tips = parseFloat(values[headers.indexOf('Tips')]);
-        const subscriptions = parseFloat(values[headers.indexOf('Subscriptions')]);
-        const note = values[headers.indexOf('Note')] || undefined;
-        const lastUpdated = values[headers.indexOf('Last Updated')] || new Date().toISOString();
-        const isManual = values[headers.indexOf('Is Manual')]?.toUpperCase() === 'TRUE';
-        
-        // Validate numeric values
-        if (isNaN(netIncome) || netIncome < 0) {
-          errors.push(`Row ${i}: Invalid Net Income value "${values[headers.indexOf('Net Income')]}"`);
-          continue;
-        }
-        
-        // Create daily category values by splitting netIncome evenly across days with default percentages
-        const daysInMonth = getDaysInMonth(monthKey);
-        const dailyCategoryValues = distributeMonthlyTotalEvenly(
-          netIncome,
-          daysInMonth,
-          {
-            media: 0.58,
-            mediaSets: 0.21,
-            tips: 0.08,
-            subscriptions: 0.13,
+
+    if (isDailyFormat) {
+      // Process daily format: group by month first
+      const monthlyData: Record<string, {
+        dailyCategoryValues: Record<string, DailyCategoryBreakdown>;
+        note?: string;
+        lastUpdated: string;
+        isManual: boolean;
+      }> = {};
+
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const row = lines[i];
+          const values = row.split(',').map(v => v.replace(/^"|"$/g, '').trim());
+
+          if (values.length < headers.length) {
+            continue; // Skip malformed rows
           }
-        );
-        
-        // Calculate daily values from dailyCategoryValues for backward compatibility
-        const dailyValues = calculateDailyValues(dailyCategoryValues);
-        
-        // Calculate category totals from dailyCategoryValues
-        const categories = calculateCategoryTotals(dailyCategoryValues);
-        
-        // Create override object
-        const override: MonthlyOverride = {
-          dailyCategoryValues,
-          dailyValues, // For backward compatibility
-          netIncome,
-          grossIncome: isNaN(grossIncome) ? netIncome * 1.2 : grossIncome,
-          categories,
-          isManual: isManual !== false,
-          lastUpdated,
-          note: note || undefined,
-        };
-        
-        // Save the override
-        saveManualOverride(monthKey, override);
-        successCount++;
-        
-      } catch (rowError) {
-        errors.push(`Row ${i}: Error processing row - ${rowError instanceof Error ? rowError.message : String(rowError)}`);
+
+          const dateStr = values[headers.indexOf('Date')]; // "YYYY-MM-DD"
+          if (!dateStr || dateStr.length < 10) continue;
+
+          const monthKey = dateStr.slice(0, 7); // "YYYY-MM"
+          const day = parseInt(dateStr.slice(8, 10), 10).toString(); // "DD" -> "D" or "DD"
+
+          if (!isValidMonthKey(monthKey)) {
+            continue;
+          }
+
+          const media = parseFloat(values[headers.indexOf('Media')]);
+          const mediaSets = parseFloat(values[headers.indexOf('Media Sets')]);
+          const tips = parseFloat(values[headers.indexOf('Tips')]);
+          const subscriptions = parseFloat(values[headers.indexOf('Subscriptions')]);
+          // Optional fields
+          const note = headers.includes('Note') ? (values[headers.indexOf('Note')] || undefined) : undefined;
+          const lastUpdated = headers.includes('Last Updated') ? (values[headers.indexOf('Last Updated')] || new Date().toISOString()) : new Date().toISOString();
+          const isManual = headers.includes('Is Manual') ? (values[headers.indexOf('Is Manual')]?.toUpperCase() === 'TRUE') : true;
+
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = {
+              dailyCategoryValues: {},
+              note,
+              lastUpdated,
+              isManual
+            };
+          }
+
+          // Use the latest note/updated timestamp encountered for the month
+          if (note) monthlyData[monthKey].note = note;
+          if (lastUpdated > monthlyData[monthKey].lastUpdated) monthlyData[monthKey].lastUpdated = lastUpdated;
+
+          monthlyData[monthKey].dailyCategoryValues[day] = {
+            media: isNaN(media) ? 0 : media,
+            mediaSets: isNaN(mediaSets) ? 0 : mediaSets,
+            tips: isNaN(tips) ? 0 : tips,
+            subscriptions: isNaN(subscriptions) ? 0 : subscriptions
+          };
+
+        } catch (e) {
+          // Skip row error
+        }
       }
+
+      // Save aggregated monthly overrides
+      for (const [monthKey, data] of Object.entries(monthlyData)) {
+        try {
+          const override = createMonthlyOverrideWithDailyCategoryValues(
+            data.dailyCategoryValues,
+            data.note
+          );
+          // Preserve metadata
+          override.lastUpdated = data.lastUpdated;
+          override.isManual = data.isManual;
+
+          saveManualOverride(monthKey, override);
+          successCount++;
+        } catch (saveError) {
+          errors.push(`Failed to save data for ${monthKey}`);
+        }
+      }
+
+      return {
+        success: successCount,
+        errors,
+        total: Object.keys(monthlyData).length
+      };
+
+    } else {
+      // Process legacy monthly format (existing logic)
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const row = lines[i];
+          const values = row.split(',').map(v => v.replace(/^"|"$/g, '').trim());
+
+          if (values.length < headers.length) {
+            errors.push(`Row ${i}: Not enough columns`);
+            continue;
+          }
+
+          const monthKey = values[headers.indexOf('Month')];
+          if (!isValidMonthKey(monthKey)) {
+            errors.push(`Row ${i}: Invalid month format "${monthKey}"`);
+            continue;
+          }
+
+          const netIncome = parseFloat(values[headers.indexOf('Net Income')]);
+          const grossIncome = parseFloat(values[headers.indexOf('Gross Income')]);
+          const note = values[headers.indexOf('Note')] || undefined;
+          const lastUpdated = values[headers.indexOf('Last Updated')] || new Date().toISOString();
+          const isManual = values[headers.indexOf('Is Manual')]?.toUpperCase() === 'TRUE';
+
+          // Create daily category values by splitting netIncome evenly
+          const daysInMonth = getDaysInMonth(monthKey);
+          const dailyCategoryValues = distributeMonthlyTotalEvenly(
+            netIncome,
+            daysInMonth,
+            {
+              media: 0.58,
+              mediaSets: 0.21,
+              tips: 0.08,
+              subscriptions: 0.13,
+            }
+          );
+
+          // Calculate daily values and totals
+          const dailyValues = calculateDailyValues(dailyCategoryValues);
+          const categories = calculateCategoryTotals(dailyCategoryValues);
+
+          const override: MonthlyOverride = {
+            dailyCategoryValues,
+            dailyValues,
+            netIncome,
+            grossIncome: isNaN(grossIncome) ? netIncome * 1.2 : grossIncome,
+            categories,
+            isManual: isManual !== false,
+            lastUpdated,
+            note: note || undefined,
+          };
+
+          saveManualOverride(monthKey, override);
+          successCount++;
+
+        } catch (rowError) {
+          errors.push(`Row ${i}: Error processing row - ${rowError instanceof Error ? rowError.message : String(rowError)}`);
+        }
+      }
+
+      return {
+        success: successCount,
+        errors,
+        total: lines.length - 1
+      };
     }
-    
-    return {
-      success: successCount,
-      errors,
-      total: lines.length - 1
-    };
-    
+
   } catch (error) {
     errors.push(`Failed to parse CSV file: ${error instanceof Error ? error.message : String(error)}`);
     return { success: 0, errors, total: 0 };
@@ -519,7 +641,7 @@ export async function importManualOverridesFromFile(file: File): Promise<{
 }> {
   return new Promise((resolve) => {
     const reader = new FileReader();
-    
+
     reader.onload = (event) => {
       try {
         const csvText = event.target?.result as string;
@@ -533,7 +655,7 @@ export async function importManualOverridesFromFile(file: File): Promise<{
         });
       }
     };
-    
+
     reader.onerror = () => {
       resolve({
         success: 0,
@@ -541,7 +663,7 @@ export async function importManualOverridesFromFile(file: File): Promise<{
         total: 0
       });
     };
-    
+
     reader.readAsText(file);
   });
 }
