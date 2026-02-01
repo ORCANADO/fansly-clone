@@ -140,12 +140,13 @@ export function Statements({ currentMonthData, targetAmount = 12000 }: Statement
     // These are used as fallback when no override exists
     const baseAmounts = {
         last30: 20943.73,
+        feb2026: 652.37,
         jan2026: 20638.37,
         dec2025: 3556.47,
     };
 
     // Statement IDs to display
-    const statementIds = ["last30", "jan2026", "dec2025"];
+    const statementIds = ["last30", "feb2026", "jan2026", "dec2025"];
 
     // Generate statement items using useMemo for performance
     const statementItems = useMemo((): StatementItem[] => {
@@ -187,9 +188,9 @@ export function Statements({ currentMonthData, targetAmount = 12000 }: Statement
                     id,
                     title: getMonthTitle(monthKey, id),
                     amount: manualOverride.netIncome,
-                    isTopPerformer: id === "dec2025",
-                    platform: id === "dec2025" ? "fansly" : undefined,
-                    percentile: id === "dec2025" ? "Top 4.60%" : undefined,
+                    isTopPerformer: id === "dec2025" || id === "jan2026",
+                    platform: "fansly",
+                    percentile: id === "dec2025" ? "Top 4.60%" : id === "jan2026" ? "Top 1.82%" : undefined,
                     data: stats.dailyData,
                     subs: stats.subs,
                     tips: stats.tips,
@@ -210,9 +211,9 @@ export function Statements({ currentMonthData, targetAmount = 12000 }: Statement
                 id,
                 title: getMonthTitle(monthKey, id),
                 amount: scaledAmount,
-                isTopPerformer: id === "dec2025",
-                platform: id === "dec2025" ? "fansly" : undefined,
-                percentile: id === "dec2025" ? "Top 4.60%" : undefined,
+                isTopPerformer: id === "dec2025" || id === "jan2026",
+                platform: (id === "dec2025" || id === "jan2026") ? "fansly" : undefined,
+                percentile: id === "dec2025" ? "Top 4.60%" : id === "jan2026" ? "Top 1.82%" : undefined,
                 data: stats.dailyData,
                 subs: stats.subs,
                 tips: stats.tips,
@@ -248,7 +249,7 @@ export function Statements({ currentMonthData, targetAmount = 12000 }: Statement
                                             {/* Authenticated Badge Icons */}
                                             {item.id === "dec2025" ? (
                                                 <BronzeBadge className="w-6 h-6" />
-                                            ) : item.id === "last30" ? (
+                                            ) : (item.id === "last30" || item.id === "jan2026") ? (
                                                 <SilverBadge className="w-6 h-6" />
                                             ) : (
                                                 <div className="flex items-center justify-center w-6 h-6 bg-yellow-500/10 rounded-full border border-yellow-500/30">
